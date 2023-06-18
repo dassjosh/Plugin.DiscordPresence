@@ -31,4 +31,8 @@
       </Reference>
     </ItemGroup>
 
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+      <Exec Command="copy &quot;DiscordPresence.cs&quot; &quot;../../DiscordPresence.cs&quot;" />
+    </Target>
+
 </Project>
