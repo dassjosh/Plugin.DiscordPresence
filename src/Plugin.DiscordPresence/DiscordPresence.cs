@@ -8,14 +8,9 @@ using Oxide.Core.Plugins;
 using Oxide.Ext.Discord.Clients;
 using Oxide.Ext.Discord.Connections;
 using Oxide.Ext.Discord.Constants;
-using Oxide.Ext.Discord.Entities.Activities;
-using Oxide.Ext.Discord.Entities.Gateway;
-using Oxide.Ext.Discord.Entities.Gateway.Commands;
-using Oxide.Ext.Discord.Entities.Gateway.Events;
-using Oxide.Ext.Discord.Entities.Users;
+using Oxide.Ext.Discord.Entities;
 using Oxide.Ext.Discord.Interfaces;
-using Oxide.Ext.Discord.Libraries.Placeholders;
-using Oxide.Ext.Discord.Libraries.Placeholders.Keys;
+using Oxide.Ext.Discord.Libraries;
 using Oxide.Ext.Discord.Logging;
 
 namespace Oxide.Plugins
