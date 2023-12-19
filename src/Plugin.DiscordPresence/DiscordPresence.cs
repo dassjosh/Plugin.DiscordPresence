@@ -1,7 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Oxide.Ext.Discord.Clients;
 using Oxide.Ext.Discord.Connections;
@@ -13,6 +15,7 @@ using Oxide.Ext.Discord.Entities.Gateway.Events;
 using Oxide.Ext.Discord.Entities.Users;
 using Oxide.Ext.Discord.Interfaces;
 using Oxide.Ext.Discord.Libraries.Placeholders;
+using Oxide.Ext.Discord.Libraries.Placeholders.Keys;
 using Oxide.Ext.Discord.Logging;
 
 namespace Oxide.Plugins
@@ -30,8 +33,6 @@ namespace Oxide.Plugins
 
         private readonly DiscordPlaceholders _placeholders = GetLibrary<DiscordPlaceholders>();
 
-        private BotConnection _discordSettings;
-
         private readonly UpdatePresenceCommand _command = new UpdatePresenceCommand
         {
             Afk = false,
@@ -40,55 +41,51 @@ namespace Oxide.Plugins
         };
 
         private readonly DiscordActivity _activity = new DiscordActivity();
+        private Action _updatePresence;
 
-        private bool _initialized;
+        private bool _serverInit;
+        private DateTime _nextApiSend;
         #endregion
 
         #region Setup & Loading
         private void Init()
         {
-            _discordSettings = new BotConnection
-            {
-                ApiToken = _pluginConfig.Token,
-                LogLevel = _pluginConfig.ExtensionDebugging,
-                Intents = GatewayIntents.None
-            };
-
             _command.Activities = new List<DiscordActivity> {_activity};
+            _updatePresence = UpdatePresence;
             if (_pluginConfig.UpdateRate < 1f)
             {
                 _pluginConfig.UpdateRate = 1f;
             }
+
+            Unsubscribe(nameof(OnUserConnected));
+            Unsubscribe(nameof(OnUserDisconnected));
         }
 
         [HookMethod(DiscordExtHooks.OnDiscordClientCreated)]
         private void OnDiscordClientCreated()
-        {
-            Connect();
-        }
-        
-        private void OnServerInitialized()
-        {
-            _initialized = true;
-        }
-
-        public void Connect()
         {
             if (string.IsNullOrEmpty(_pluginConfig.Token))
             {
                 PrintWarning("Please enter your bot token in the config and reload the plugin.");
                 return;
             }
-
-            Client.Connect(_discordSettings);
+            
+            Client.Connect(new BotConnection
+            {
+                ApiToken = _pluginConfig.Token,
+                LogLevel = _pluginConfig.ExtensionDebugging,
+                Intents = GatewayIntents.None
+            });
         }
 
         [HookMethod(DiscordExtHooks.OnDiscordGatewayReady)]
         private void OnDiscordGatewayReady(GatewayReadyEvent ready)
         {
             Puts($"{Title} Ready");
-            timer.In(1f, InitialMessage);
-            timer.Every(_pluginConfig.UpdateRate, UpdatePresence);
+            if (_pluginConfig.EnableLoadingMessage && !_serverInit)
+            {
+                SendLoadingMessage();
+            }
         }
 
         protected override void LoadDefaultConfig()
@@ -109,20 +106,19 @@ namespace Oxide.Plugins
             config.LoadingMessage = new MessageSettings(config.LoadingMessage ?? new MessageSettings("Server is booting", ActivityType.Game));
             config.StatusMessages = config.StatusMessages ?? new List<MessageSettings>
             {
-                new MessageSettings("on {server.name}", ActivityType.Game),
-                new MessageSettings("{server.players}/{server.players.max} Players", ActivityType.Game),
-                new MessageSettings("{server.players.sleepers} Sleepers", ActivityType.Game),
-                new MessageSettings("{server.players.stored} Total Players", ActivityType.Game),
-                new MessageSettings("Server FPS {server.fps}", ActivityType.Game),
-                new MessageSettings("{server.entities} Entities", ActivityType.Game),
-                new MessageSettings("{server.players.total} Lifetime Players", ActivityType.Game),
-                #if RUST
-                new MessageSettings("{server.entities} Entities", ActivityType.Game),
-                new MessageSettings("{server.players.queued} Queued", ActivityType.Game),
-                new MessageSettings("{server.players.loading} Joining", ActivityType.Game),
-                new MessageSettings("Wiped: {server.map.wipe.last!local}", ActivityType.Game),
-                new MessageSettings("Size: {world.size} Seed: {world.seed}", ActivityType.Game)
-                #endif
+                new MessageSettings($"{DefaultKeys.Server.Name}", ActivityType.Custom),
+                new MessageSettings($"{DefaultKeys.Server.Players}/{DefaultKeys.Server.MaxPlayers} Players", ActivityType.Custom),
+                new MessageSettings("{server.players.sleepers} Sleepers", ActivityType.Custom),
+                new MessageSettings("{server.players.stored} Total Players", ActivityType.Custom),
+                new MessageSettings("Server FPS {server.fps}", ActivityType.Custom),
+                new MessageSettings("{server.entities} Entities", ActivityType.Custom),
+                new MessageSettings("{server.players.total} Lifetime Players", ActivityType.Custom),
+#if RUST
+                new MessageSettings("{server.players.queued} Queued", ActivityType.Custom),
+                new MessageSettings("{server.players.loading} Joining", ActivityType.Custom),
+                new MessageSettings("Wiped: {server.map.wipe.last!local}", ActivityType.Custom),
+                new MessageSettings("Size: {world.size} Seed: {world.seed}", ActivityType.Custom)
+#endif
             };
 
             for (int index = 0; index < config.StatusMessages.Count; index++)
@@ -132,20 +128,50 @@ namespace Oxide.Plugins
 
             return config;
         }
-
-        public void InitialMessage()
+        
+        private void OnServerInitialized()
         {
-            if (_initialized)
+            _serverInit = true;
+            if (Client.IsConnected())
             {
-                UpdatePresence();
-                return;
+                timer.In(2.5f, UpdatePresence);
             }
 
+            if (_pluginConfig.EnableUpdateInterval)
+            {
+                timer.Every(_pluginConfig.UpdateRate, UpdatePresence);
+            }
+            
+            if (_pluginConfig.UpdateOnPlayerStateChange)
+            {
+                Subscribe(nameof(OnUserConnected));
+                Subscribe(nameof(OnUserDisconnected));
+            }
+        }
+        #endregion
+        
+        #region Hooks
+        private void OnUserConnected(IPlayer player) => UpdatePresence();
+
+        private void OnUserDisconnected(IPlayer player) => NextTick(_updatePresence);
+        
+        private void OnDiscordGatewayResumed() => UpdatePresence();
+        private void OnDiscordGatewayReconnected() => UpdatePresence();
+        #endregion
+
+        #region Message Handling
+        public void SendLoadingMessage()
+        {
             SendUpdate(_pluginConfig.LoadingMessage);
         }
         
         public void UpdatePresence()
         {
+            if (!_serverInit)
+            {
+                return;
+            }
+            
             if (_pluginConfig.StatusMessages.Count == 0)
             {
                 PrintError("Presence Text formats contains no values. Please add some to your config");
@@ -156,17 +182,38 @@ namespace Oxide.Plugins
             _index = ++_index % _pluginConfig.StatusMessages.Count;
         }
 
-        public void SendUpdate(MessageSettings settings)
-        {
-            _activity.Name = _placeholders.ProcessPlaceholders(settings.Message, GetDefault());
-            _activity.Type = settings.Type;
+        public void SendUpdate(MessageSettings settings) => SendUpdate(settings.Message, settings.Type);
 
+        public void SendUpdate(string message, ActivityType type)
+        {
+            _activity.Name = null;
+            _activity.State = null;
+            string text = _placeholders.ProcessPlaceholders(message, GetDefault());
+            if (type == ActivityType.Custom)
+            {
+                _activity.State = text;
+                _activity.Name = text;
+            }
+            else
+            {
+                _activity.Name = text;
+            }
+
+            _activity.Type = type;
             Client?.UpdateStatus(_command);
         }
 
-        public PlaceholderData GetDefault()
+        public PlaceholderData GetDefault() => _placeholders.CreateData(this);
+        #endregion
+
+        #region API
+        private void API_SendUpdateMessage(string message, int activity = (int)ActivityType.Custom)
         {
-            return _placeholders.CreateData(this);
+            if (_nextApiSend <= DateTime.UtcNow)
+            {
+                _nextApiSend = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+                SendUpdate(message, (ActivityType)activity);
+            }
         }
         #endregion
 
@@ -177,11 +224,23 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = "Discord Application Bot Token")]
             public string Token { get; set; }
             
+            [DefaultValue(true)]
+            [JsonProperty(PropertyName = "Enable Sending Message Per Update Rate")]
+            public bool EnableUpdateInterval { get; set; }
+            
+            [DefaultValue(true)]
+            [JsonProperty(PropertyName = "Enable Sending Message On Player Leave/Join")]
+            public bool UpdateOnPlayerStateChange { get; set; }
+            
+            [DefaultValue(true)]
+            [JsonProperty(PropertyName = "Enable Sending Server Loading Message")]
+            public bool EnableLoadingMessage { get; set; }
+            
             [DefaultValue(15f)]
             [JsonProperty(PropertyName = "Update Rate (Seconds)")]
             public float UpdateRate { get; set; }
 
-            [JsonProperty(PropertyName = "Presence Messages")]
+            [JsonProperty(PropertyName = "Status Messages")]
             public List<MessageSettings> StatusMessages { get; set; }
             
             [JsonProperty(PropertyName = "Server Loading Message")]

@@ -64,30 +64,25 @@ namespace Oxide.Plugins
         [HookMethod(DiscordExtHooks.OnDiscordClientCreated)]
         private void OnDiscordClientCreated()
         {
-            Connect();
+            if (string.IsNullOrEmpty(_pluginConfig.Token))
+            {
+                PrintWarning("Please enter your bot token in the config and reload the plugin.");
+                return;
+            }
+            
+            Client.Connect(_discordSettings);
         }
         
         private void OnServerInitialized()
         {
             _initialized = true;
         }
-
-        public void Connect()
-        {
-            if (string.IsNullOrEmpty(_pluginConfig.Token))
-            {
-                PrintWarning("Please enter your bot token in the config and reload the plugin.");
-                return;
-            }
-
-            Client.Connect(_discordSettings);
-        }
-
+        
         [HookMethod(DiscordExtHooks.OnDiscordGatewayReady)]
         private void OnDiscordGatewayReady(GatewayReadyEvent ready)
         {
             Puts($"{Title} Ready");
-            timer.In(1f, InitialMessage);
+            timer.In(0.1f, InitialMessage);
             timer.Every(_pluginConfig.UpdateRate, UpdatePresence);
         }
 
@@ -116,13 +111,12 @@ namespace Oxide.Plugins
                 new MessageSettings("Server FPS {server.fps}", ActivityType.Game),
                 new MessageSettings("{server.entities} Entities", ActivityType.Game),
                 new MessageSettings("{server.players.total} Lifetime Players", ActivityType.Game),
-                #if RUST
-                new MessageSettings("{server.entities} Entities", ActivityType.Game),
+#if RUST
                 new MessageSettings("{server.players.queued} Queued", ActivityType.Game),
                 new MessageSettings("{server.players.loading} Joining", ActivityType.Game),
                 new MessageSettings("Wiped: {server.map.wipe.last!local}", ActivityType.Game),
                 new MessageSettings("Size: {world.size} Seed: {world.seed}", ActivityType.Game)
-                #endif
+#endif
             };
 
             for (int index = 0; index < config.StatusMessages.Count; index++)
@@ -146,6 +140,11 @@ namespace Oxide.Plugins
         
         public void UpdatePresence()
         {
+            if (!_initialized)
+            {
+                return;
+            }
+            
             if (_pluginConfig.StatusMessages.Count == 0)
             {
                 PrintError("Presence Text formats contains no values. Please add some to your config");
@@ -164,10 +163,7 @@ namespace Oxide.Plugins
             Client?.UpdateStatus(_command);
         }
 
-        public PlaceholderData GetDefault()
-        {
-            return _placeholders.CreateData(this);
-        }
+        public PlaceholderData GetDefault() => _placeholders.CreateData(this);
         #endregion
 
         #region Classes
@@ -181,7 +177,7 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = "Update Rate (Seconds)")]
             public float UpdateRate { get; set; }
 
-            [JsonProperty(PropertyName = "Presence Messages")]
+            [JsonProperty(PropertyName = "Status Messages")]
             public List<MessageSettings> StatusMessages { get; set; }
             
             [JsonProperty(PropertyName = "Server Loading Message")]
