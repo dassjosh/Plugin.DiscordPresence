@@ -28,14 +28,14 @@ namespace Oxide.Plugins
 
         private readonly DiscordPlaceholders _placeholders = GetLibrary<DiscordPlaceholders>();
 
-        private readonly UpdatePresenceCommand _command = new UpdatePresenceCommand
+        private readonly UpdatePresenceCommand _command = new()
         {
             Afk = false,
             Since = 0,
             Status = UserStatusType.Online
         };
 
-        private readonly DiscordActivity _activity = new DiscordActivity();
+        private readonly DiscordActivity _activity = new();
         private Action _updatePresence;
 
         private bool _serverInit;
@@ -99,15 +99,15 @@ namespace Oxide.Plugins
         public PluginConfig AdditionalConfig(PluginConfig config)
         {
             config.LoadingMessage = new MessageSettings(config.LoadingMessage ?? new MessageSettings("Server is booting", ActivityType.Game));
-            config.StatusMessages = config.StatusMessages ?? new List<MessageSettings>
+            config.StatusMessages ??= new List<MessageSettings>
             {
-                new MessageSettings($"{DefaultKeys.Server.Name}", ActivityType.Custom),
-                new MessageSettings($"{DefaultKeys.Server.Players}/{DefaultKeys.Server.MaxPlayers} Players", ActivityType.Custom),
-                new MessageSettings("{server.players.sleepers} Sleepers", ActivityType.Custom),
-                new MessageSettings("{server.players.stored} Total Players", ActivityType.Custom),
-                new MessageSettings("Server FPS {server.fps}", ActivityType.Custom),
-                new MessageSettings("{server.entities} Entities", ActivityType.Custom),
-                new MessageSettings("{server.players.total} Lifetime Players", ActivityType.Custom),
+                new($"{DefaultKeys.Server.Name}", ActivityType.Custom),
+                new($"{DefaultKeys.Server.Players}/{DefaultKeys.Server.MaxPlayers} Players", ActivityType.Custom),
+                new("{server.players.sleepers} Sleepers", ActivityType.Custom),
+                new("{server.players.stored} Total Players", ActivityType.Custom),
+                new("Server FPS {server.fps}", ActivityType.Custom),
+                new("{server.entities} Entities", ActivityType.Custom),
+                new("{server.players.total} Lifetime Players", ActivityType.Custom),
 #if RUST
                 new MessageSettings("{server.players.queued} Queued", ActivityType.Custom),
                 new MessageSettings("{server.players.loading} Joining", ActivityType.Custom),
