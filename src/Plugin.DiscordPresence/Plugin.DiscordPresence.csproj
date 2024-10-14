@@ -32,6 +32,12 @@
       </Reference>
     </ItemGroup>
 
+    <ItemGroup>
+      <Content Include="..\..\README.md">
+        <Link>README.md</Link>
+      </Content>
+    </ItemGroup>
+
     <Target Name="PostBuild" AfterTargets="PostBuildEvent">
       <Exec Command="copy &quot;DiscordPresence.cs&quot; &quot;../../DiscordPresence.cs&quot;" />
     </Target>
