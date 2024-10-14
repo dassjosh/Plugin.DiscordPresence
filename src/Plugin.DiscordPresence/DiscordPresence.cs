@@ -187,13 +187,9 @@ namespace Oxide.Plugins
             if (type == ActivityType.Custom)
             {
                 _activity.State = text;
-                _activity.Name = text;
-            }
-            else
-            {
-                _activity.Name = text;
             }
 
+            _activity.Name = text;
             _activity.Type = type;
             Client?.UpdateStatus(_command);
         }
@@ -252,7 +248,7 @@ namespace Oxide.Plugins
             public string Message { get; set; }
             
             [JsonConverter(typeof(StringEnumConverter))]
-            [DefaultValue(ActivityType.Game)]
+            [DefaultValue(ActivityType.Custom)]
             public ActivityType Type { get; set; }
 
             [JsonConstructor]
