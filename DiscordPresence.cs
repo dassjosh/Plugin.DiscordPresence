@@ -15,7 +15,7 @@ using Oxide.Ext.Discord.Logging;
 
 namespace Oxide.Plugins
 {
-    [Info("Discord Presence", "MJSU", "3.0.0")]
+    [Info("Discord Presence", "MJSU", "3.0.1")]
     [Description("Updates the Discord bot status message")]
     internal class DiscordPresence : CovalencePlugin, IDiscordPlugin
     {
@@ -39,6 +39,7 @@ namespace Oxide.Plugins
         private Action _updatePresence;
 
         private bool _serverInit;
+        private bool _gatewayReady;
         private DateTime _nextApiSend;
         #endregion
 
@@ -76,6 +77,7 @@ namespace Oxide.Plugins
         [HookMethod(DiscordExtHooks.OnDiscordGatewayReady)]
         private void OnDiscordGatewayReady(GatewayReadyEvent ready)
         {
+            _gatewayReady = true;
             Puts($"{Title} Ready");
             if (_pluginConfig.EnableLoadingMessage && !_serverInit)
             {
@@ -162,7 +164,7 @@ namespace Oxide.Plugins
         
         public void UpdatePresence()
         {
-            if (!_serverInit)
+            if (!_serverInit || !_gatewayReady)
             {
                 return;
             }
